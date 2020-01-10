@@ -16,7 +16,6 @@ from pandas.core.dtypes.common import (
     is_any_int_dtype,
     is_bool_dtype,
     is_complex,
-    is_complex_dtype,
     is_datetime64_dtype,
     is_datetime64tz_dtype,
     is_datetime_or_timedelta_dtype,
@@ -61,8 +60,10 @@ class disallow:
         def _f(*args, **kwargs):
             obj_iter = itertools.chain(args, kwargs.values())
             if any(self.check(obj) for obj in obj_iter):
-                msg = "reduction operation {name!r} not allowed for this dtype"
-                raise TypeError(msg.format(name=f.__name__.replace("nan", "")))
+                f_name = f.__name__.replace("nan", "")
+                raise TypeError(
+                    f"reduction operation '{f_name}' not allowed for this dtype"
+                )
             try:
                 with np.errstate(invalid="ignore"):
                     return f(*args, **kwargs)
@@ -273,6 +274,12 @@ def _get_values(
     fill_value : Any
         fill value used
     """
+
+    # In _get_values is only called from within nanops, and in all cases
+    #  with scalar fill_value.  This guarantee is important for the
+    #  maybe_upcast_putmask call below
+    assert is_scalar(fill_value)
+
     mask = _maybe_get_mask(values, skipna, mask)
 
     if is_datetime64tz_dtype(values):
@@ -307,7 +314,7 @@ def _get_values(
 
         # promote if needed
         else:
-            values, changed = maybe_upcast_putmask(values, mask, fill_value)
+            values, _ = maybe_upcast_putmask(values, mask, fill_value)
 
     # return a platform independent precision dtype
     dtype_max = dtype
@@ -317,19 +324,6 @@ def _get_values(
         dtype_max = np.float64
 
     return values, mask, dtype, dtype_max, fill_value
-
-
-def _isfinite(values):
-    if is_datetime_or_timedelta_dtype(values):
-        return isna(values)
-    if (
-        is_complex_dtype(values)
-        or is_float_dtype(values)
-        or is_integer_dtype(values)
-        or is_bool_dtype(values)
-    ):
-        return ~np.isfinite(values)
-    return ~np.isfinite(values.astype("float64"))
 
 
 def _na_ok_dtype(dtype):
@@ -668,7 +662,7 @@ def _get_counts_nanvar(
             count = np.nan
             d = np.nan
     else:
-        mask2 = count <= ddof  # type: np.ndarray
+        mask2: np.ndarray = count <= ddof
         if mask2.any():
             np.putmask(d, mask2, np.nan)
             np.putmask(count, mask2, np.nan)
@@ -705,11 +699,14 @@ def nanstd(values, axis=None, skipna=True, ddof=1, mask=None):
     >>> nanops.nanstd(s)
     1.0
     """
+    orig_dtype = values.dtype
+    values, mask, dtype, dtype_max, fill_value = _get_values(values, skipna, mask=mask)
+
     result = np.sqrt(nanvar(values, axis=axis, skipna=skipna, ddof=ddof, mask=mask))
-    return _wrap_results(result, values.dtype)
+    return _wrap_results(result, orig_dtype)
 
 
-@disallow("M8")
+@disallow("M8", "m8")
 @bottleneck_switch(ddof=1)
 def nanvar(values, axis=None, skipna=True, ddof=1, mask=None):
     """
@@ -834,7 +831,7 @@ def _nanminmax(meth, fill_value_typ):
             try:
                 result = getattr(values, meth)(axis, dtype=dtype_max)
                 result.fill(np.nan)
-            except (AttributeError, TypeError, ValueError, np.core._internal.AxisError):
+            except (AttributeError, TypeError, ValueError):
                 result = np.nan
         else:
             result = getattr(values, meth)(axis)
@@ -1246,17 +1243,22 @@ def nancorr(a, b, method="pearson", min_periods=None):
 def get_corr_func(method):
     if method in ["kendall", "spearman"]:
         from scipy.stats import kendalltau, spearmanr
+    elif method in ["pearson"]:
+        pass
     elif callable(method):
         return method
+    else:
+        raise ValueError(
+            f"Unkown method '{method}', expected one of 'kendall', 'spearman'"
+        )
 
     def _pearson(a, b):
         return np.corrcoef(a, b)[0, 1]
 
     def _kendall(a, b):
+        # kendallttau returns a tuple of the tau statistic and pvalue
         rs = kendalltau(a, b)
-        if isinstance(rs, tuple):
-            return rs[0]
-        return rs
+        return rs[0]
 
     def _spearman(a, b):
         return spearmanr(a, b)[0]
@@ -1305,9 +1307,7 @@ def _ensure_numeric(x):
                 x = complex(x)
             except ValueError:
                 # e.g. "foo"
-                raise TypeError(
-                    "Could not convert {value!s} to numeric".format(value=x)
-                )
+                raise TypeError(f"Could not convert {x} to numeric")
     return x
 
 
@@ -1343,7 +1343,7 @@ nanne = make_nancomp(operator.ne)
 
 def _nanpercentile_1d(values, mask, q, na_value, interpolation):
     """
-    Wraper for np.percentile that skips missing values, specialized to
+    Wrapper for np.percentile that skips missing values, specialized to
     1-dimensional case.
 
     Parameters
@@ -1374,7 +1374,7 @@ def _nanpercentile_1d(values, mask, q, na_value, interpolation):
 
 def nanpercentile(values, q, axis, na_value, mask, ndim, interpolation):
     """
-    Wraper for np.percentile that skips missing values.
+    Wrapper for np.percentile that skips missing values.
 
     Parameters
     ----------

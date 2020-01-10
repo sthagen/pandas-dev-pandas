@@ -27,6 +27,13 @@ _int64_max = np.iinfo(np.int64).max
 
 cdef float64_t NaN = <float64_t>np.NaN
 
+cdef enum InterpolationEnumType:
+    INTERPOLATION_LINEAR,
+    INTERPOLATION_LOWER,
+    INTERPOLATION_HIGHER,
+    INTERPOLATION_NEAREST,
+    INTERPOLATION_MIDPOINT
+
 
 cdef inline float64_t median_linear(float64_t* a, int n) nogil:
     cdef:
@@ -168,7 +175,6 @@ def group_cumprod_float64(float64_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         float64_t val
@@ -226,7 +232,6 @@ def group_cumsum(numeric[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         numeric val
@@ -746,8 +751,7 @@ def group_quantile(ndarray[float64_t] out,
     assert values.shape[0] == N
 
     if not (0 <= q <= 1):
-        raise ValueError("'q' must be between 0 and 1. Got"
-                         " '{}' instead".format(q))
+        raise ValueError(f"'q' must be between 0 and 1. Got '{q}' instead")
 
     inter_methods = {
         'linear': INTERPOLATION_LINEAR,
@@ -787,7 +791,7 @@ def group_quantile(ndarray[float64_t] out,
                 out[i] = NaN
             else:
                 # Calculate where to retrieve the desired value
-                # Casting to int will intentionaly truncate result
+                # Casting to int will intentionally truncate result
                 idx = grp_start + <int64_t>(q * <float64_t>(non_na_sz - 1))
 
                 val = values[sort_arr[idx]]
@@ -1398,7 +1402,6 @@ def group_cummin(groupby_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         groupby_t val, mval
@@ -1459,7 +1462,6 @@ def group_cummax(groupby_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         groupby_t val, mval
