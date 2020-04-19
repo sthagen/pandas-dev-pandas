@@ -242,8 +242,6 @@ class Categorical(ExtensionArray, PandasObject):
     dtype : CategoricalDtype
         An instance of ``CategoricalDtype`` to use for this categorical.
 
-        .. versionadded:: 0.21.0
-
     Attributes
     ----------
     categories : Index
@@ -256,8 +254,6 @@ class Categorical(ExtensionArray, PandasObject):
     dtype : CategoricalDtype
         The instance of ``CategoricalDtype`` storing the ``categories``
         and ``ordered``.
-
-        .. versionadded:: 0.21.0
 
     Methods
     -------
@@ -374,7 +370,7 @@ class Categorical(ExtensionArray, PandasObject):
             # we're inferring from values
             dtype = CategoricalDtype(categories, dtype.ordered)
 
-        elif is_categorical_dtype(values):
+        elif is_categorical_dtype(values.dtype):
             old_codes = (
                 values._values.codes if isinstance(values, ABCSeries) else values.codes
             )
@@ -876,8 +872,6 @@ class Categorical(ExtensionArray, PandasObject):
               are passed through and extra categories in the mapping are
               ignored.
 
-            .. versionadded:: 0.21.0.
-
             * callable : a callable that is called on all items in the old
               categories and whose return values comprise the new categories.
 
@@ -1306,7 +1300,6 @@ class Categorical(ExtensionArray, PandasObject):
         if not isinstance(state, dict):
             raise Exception("invalid pickle state")
 
-        # compat with pre 0.21.0 CategoricalDtype change
         if "_dtype" not in state:
             state["_dtype"] = CategoricalDtype(state["_categories"], state["_ordered"])
 
@@ -2150,7 +2143,7 @@ class Categorical(ExtensionArray, PandasObject):
 
         good = self._codes != -1
         if not good.all():
-            if skipna:
+            if skipna and good.any():
                 pointer = self._codes[good].min()
             else:
                 return np.nan
@@ -2185,7 +2178,7 @@ class Categorical(ExtensionArray, PandasObject):
 
         good = self._codes != -1
         if not good.all():
-            if skipna:
+            if skipna and good.any():
                 pointer = self._codes[good].max()
             else:
                 return np.nan
@@ -2454,6 +2447,8 @@ class Categorical(ExtensionArray, PandasObject):
         # other cases, like if both to_replace and value are list-like or if
         # to_replace is a dict, are handled separately in NDFrame
         for replace_value, new_value in replace_dict.items():
+            if new_value == replace_value:
+                continue
             if replace_value in cat.categories:
                 if isna(new_value):
                     cat.remove_categories(replace_value, inplace=True)
