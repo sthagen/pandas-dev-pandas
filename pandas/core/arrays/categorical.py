@@ -463,7 +463,7 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject):
                 return self
             return self._set_dtype(dtype)
         if is_extension_array_dtype(dtype):
-            return array(self, dtype=dtype, copy=copy)  # type: ignore # GH 28770
+            return array(self, dtype=dtype, copy=copy)
         if is_integer_dtype(dtype) and self.isna().any():
             raise ValueError("Cannot convert float NaN to integer")
         return np.array(self, dtype=dtype, copy=copy)
@@ -1196,7 +1196,7 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject):
 
         fill_value = self._validate_fill_value(fill_value)
 
-        codes = shift(codes.copy(), periods, axis=0, fill_value=fill_value)
+        codes = shift(codes, periods, axis=0, fill_value=fill_value)
 
         return self._constructor(codes, dtype=self.dtype, fastpath=True)
 
@@ -1424,7 +1424,7 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject):
             Index if datetime / periods.
         """
         # if we are a datetime and period index, return Index to keep metadata
-        if needs_i8_conversion(self.categories):
+        if needs_i8_conversion(self.categories.dtype):
             return self.categories.take(self._codes, fill_value=np.nan)
         elif is_integer_dtype(self.categories) and -1 in self._codes:
             return self.categories.astype("object").take(self._codes, fill_value=np.nan)
@@ -1495,7 +1495,9 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject):
         """
         return super().argsort(ascending=ascending, kind=kind, **kwargs)
 
-    def sort_values(self, inplace=False, ascending=True, na_position="last"):
+    def sort_values(
+        self, inplace: bool = False, ascending: bool = True, na_position: str = "last",
+    ):
         """
         Sort the Categorical by category value returning a new
         Categorical by default.
@@ -2294,9 +2296,9 @@ class Categorical(NDArrayBackedExtensionArray, PandasObject):
 
     @classmethod
     def _concat_same_type(self, to_concat):
-        from pandas.core.dtypes.concat import concat_categorical
+        from pandas.core.dtypes.concat import union_categoricals
 
-        return concat_categorical(to_concat)
+        return union_categoricals(to_concat)
 
     def isin(self, values):
         """

@@ -589,7 +589,7 @@ def array_equivalent_object(left: object[:], right: object[:]) -> bool:
         except TypeError as err:
             # Avoid raising TypeError on tzawareness mismatch
             # TODO: This try/except can be removed if/when Timestamp
-            #  comparisons are change dto match datetime, see GH#28507
+            #  comparisons are changed to match datetime, see GH#28507
             if "tz-naive and tz-aware" in str(err):
                 return False
             raise
@@ -988,7 +988,7 @@ def is_list_like(obj: object, allow_sets: bool = True) -> bool:
     return c_is_list_like(obj, allow_sets)
 
 
-cdef inline bint c_is_list_like(object obj, bint allow_sets):
+cdef inline bint c_is_list_like(object obj, bint allow_sets) except -1:
     return (
         isinstance(obj, abc.Iterable)
         # we do not count strings/unicode/bytes as list-like
@@ -2346,8 +2346,6 @@ def map_infer_mask(ndarray arr, object f, const uint8_t[:] mask, bint convert=Tr
 
             if cnp.PyArray_IsZeroDim(val):
                 # unbox 0-dim arrays, GH#690
-                # TODO: is there a faster way to unbox?
-                #   item_from_zerodim?
                 val = val.item()
 
         result[i] = val
@@ -2388,8 +2386,6 @@ def map_infer(ndarray arr, object f, bint convert=True):
 
         if cnp.PyArray_IsZeroDim(val):
             # unbox 0-dim arrays, GH#690
-            # TODO: is there a faster way to unbox?
-            #   item_from_zerodim?
             val = val.item()
 
         result[i] = val
