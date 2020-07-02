@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, tzinfo
 from typing import Optional, Union
 import warnings
 
@@ -9,15 +9,14 @@ from pandas._libs import lib, tslib
 from pandas._libs.tslibs import (
     NaT,
     Timestamp,
-    ccalendar,
     conversion,
     fields,
     iNaT,
     resolution as libresolution,
     timezones,
+    to_offset,
     tzconversion,
 )
-import pandas._libs.tslibs.frequencies as libfrequencies
 from pandas.errors import PerformanceWarning
 
 from pandas.core.dtypes.common import (
@@ -47,7 +46,7 @@ from pandas.core.arrays import datetimelike as dtl
 from pandas.core.arrays._ranges import generate_regular_range
 import pandas.core.common as com
 
-from pandas.tseries.frequencies import get_period_alias, to_offset
+from pandas.tseries.frequencies import get_period_alias
 from pandas.tseries.offsets import BDay, Day, Tick
 
 _midnight = time(0, 0)
@@ -407,7 +406,7 @@ class DatetimeArray(dtl.DatetimeLikeArrayMixin, dtl.TimelikeOps, dtl.DatelikeOps
             index = cls._simple_new(values, freq=freq, dtype=tz_to_dtype(_tz))
 
             if tz is not None and index.tz is None:
-                arr = conversion.tz_localize_to_utc(
+                arr = tzconversion.tz_localize_to_utc(
                     index.asi8, tz, ambiguous=ambiguous, nonexistent=nonexistent
                 )
 
@@ -538,8 +537,8 @@ class DatetimeArray(dtl.DatetimeLikeArrayMixin, dtl.TimelikeOps, dtl.DatelikeOps
         return conversion.is_date_array_normalized(self.asi8, self.tz)
 
     @property  # NB: override with cache_readonly in immutable subclasses
-    def _resolution(self):
-        return libresolution.resolution(self.asi8, self.tz)
+    def _resolution_obj(self) -> libresolution.Resolution:
+        return libresolution.get_resolution(self.asi8, self.tz)
 
     # ----------------------------------------------------------------
     # Array-Like / EA-Interface Methods
@@ -686,7 +685,9 @@ class DatetimeArray(dtl.DatetimeLikeArrayMixin, dtl.TimelikeOps, dtl.DatelikeOps
                 values = self.tz_localize(None)
             else:
                 values = self
-            result = offset.apply_index(values).tz_localize(self.tz)
+            result = offset.apply_index(values)
+            result = DatetimeArray._simple_new(result)
+            result = result.tz_localize(self.tz)
 
         except NotImplementedError:
             warnings.warn(
@@ -968,7 +969,7 @@ default 'raise'
             tz = timezones.maybe_get_tz(tz)
             # Convert to UTC
 
-            new_dates = conversion.tz_localize_to_utc(
+            new_dates = tzconversion.tz_localize_to_utc(
                 self.asi8, tz, ambiguous=ambiguous, nonexistent=nonexistent
             )
         new_dates = new_dates.view(DT64NS_DTYPE)
@@ -1036,14 +1037,7 @@ default 'raise'
                        '2014-08-01 00:00:00+05:30'],
                        dtype='datetime64[ns, Asia/Calcutta]', freq=None)
         """
-        if self.tz is None or timezones.is_utc(self.tz):
-            not_null = ~self.isna()
-            DAY_NS = ccalendar.DAY_SECONDS * 1_000_000_000
-            new_values = self.asi8.copy()
-            adjustment = new_values[not_null] % DAY_NS
-            new_values[not_null] = new_values[not_null] - adjustment
-        else:
-            new_values = conversion.normalize_i8_timestamps(self.asi8, self.tz)
+        new_values = conversion.normalize_i8_timestamps(self.asi8, self.tz)
         return type(self)(new_values)._with_freq("infer").tz_localize(self.tz)
 
     def to_period(self, freq=None):
@@ -1111,8 +1105,7 @@ default 'raise'
 
             #  https://github.com/pandas-dev/pandas/issues/33358
             if res is None:
-                base, stride = libfrequencies.base_and_stride(freq)
-                res = f"{stride}{base}"
+                res = freq
 
             freq = res
 
@@ -1132,7 +1125,14 @@ default 'raise'
         -------
         TimedeltaArray/Index
         """
-        # TODO: consider privatizing (discussion in GH#23113)
+        # Deprecaation GH#34853
+        warnings.warn(
+            "to_perioddelta is deprecated and will be removed in a "
+            "future version.  "
+            "Use `dtindex - dtindex.to_period(freq).to_timestamp()` instead",
+            FutureWarning,
+            stacklevel=3,
+        )
         from pandas.core.arrays.timedeltas import TimedeltaArray
 
         i8delta = self.asi8 - self.to_period(freq).to_timestamp().asi8
@@ -1889,7 +1889,7 @@ def sequence_to_dt64ns(
     dayfirst : bool, default False
     yearfirst : bool, default False
     ambiguous : str, bool, or arraylike, default 'raise'
-        See pandas._libs.tslibs.conversion.tz_localize_to_utc.
+        See pandas._libs.tslibs.tzconversion.tz_localize_to_utc.
 
     Returns
     -------
@@ -1908,6 +1908,7 @@ def sequence_to_dt64ns(
     inferred_freq = None
 
     dtype = _validate_dt64_dtype(dtype)
+    tz = timezones.maybe_get_tz(tz)
 
     if not hasattr(data, "dtype"):
         # e.g. list, tuple
@@ -1950,14 +1951,14 @@ def sequence_to_dt64ns(
             data, inferred_tz = objects_to_datetime64ns(
                 data, dayfirst=dayfirst, yearfirst=yearfirst
             )
-            tz = maybe_infer_tz(tz, inferred_tz)
+            tz = _maybe_infer_tz(tz, inferred_tz)
         data_dtype = data.dtype
 
     # `data` may have originally been a Categorical[datetime64[ns, tz]],
     # so we need to handle these types.
     if is_datetime64tz_dtype(data_dtype):
         # DatetimeArray -> ndarray
-        tz = maybe_infer_tz(tz, data.tz)
+        tz = _maybe_infer_tz(tz, data.tz)
         result = data._data
 
     elif is_datetime64_dtype(data_dtype):
@@ -1969,7 +1970,7 @@ def sequence_to_dt64ns(
         if tz is not None:
             # Convert tz-naive to UTC
             tz = timezones.maybe_get_tz(tz)
-            data = conversion.tz_localize_to_utc(
+            data = tzconversion.tz_localize_to_utc(
                 data.view("i8"), tz, ambiguous=ambiguous
             )
             data = data.view(DT64NS_DTYPE)
@@ -2144,7 +2145,9 @@ def maybe_convert_dtype(data, copy):
 # Validation and Inference
 
 
-def maybe_infer_tz(tz, inferred_tz):
+def _maybe_infer_tz(
+    tz: Optional[tzinfo], inferred_tz: Optional[tzinfo]
+) -> Optional[tzinfo]:
     """
     If a timezone is inferred from data, check that it is compatible with
     the user-provided timezone, if any.
@@ -2216,7 +2219,7 @@ def _validate_dt64_dtype(dtype):
     return dtype
 
 
-def validate_tz_from_dtype(dtype, tz):
+def validate_tz_from_dtype(dtype, tz: Optional[tzinfo]) -> Optional[tzinfo]:
     """
     If the given dtype is a DatetimeTZDtype, extract the implied
     tzinfo object from it and check that it does not conflict with the given
@@ -2263,7 +2266,9 @@ def validate_tz_from_dtype(dtype, tz):
     return tz
 
 
-def _infer_tz_from_endpoints(start, end, tz):
+def _infer_tz_from_endpoints(
+    start: Timestamp, end: Timestamp, tz: Optional[tzinfo]
+) -> Optional[tzinfo]:
     """
     If a timezone is not explicitly given via `tz`, see if one can
     be inferred from the `start` and `end` endpoints.  If more than one
