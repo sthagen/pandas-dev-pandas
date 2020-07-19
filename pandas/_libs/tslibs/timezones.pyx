@@ -1,6 +1,5 @@
 from datetime import timezone
-from cpython.datetime cimport datetime, tzinfo, PyTZInfo_Check, PyDateTime_IMPORT
-PyDateTime_IMPORT
+from cpython.datetime cimport datetime, timedelta, tzinfo
 
 # dateutil compat
 from dateutil.tz import (
@@ -47,7 +46,7 @@ cdef inline bint treat_tz_as_dateutil(tzinfo tz):
     return hasattr(tz, '_trans_list') and hasattr(tz, '_trans_idx')
 
 
-cpdef inline object get_timezone(object tz):
+cpdef inline object get_timezone(tzinfo tz):
     """
     We need to do several things here:
     1) Distinguish between pytz and dateutil timezones
@@ -60,9 +59,7 @@ cpdef inline object get_timezone(object tz):
     the tz name. It needs to be a string so that we can serialize it with
     UJSON/pytables. maybe_get_tz (below) is the inverse of this process.
     """
-    if not PyTZInfo_Check(tz):
-        return tz
-    elif is_utc(tz):
+    if is_utc(tz):
         return tz
     else:
         if treat_tz_as_dateutil(tz):
@@ -87,7 +84,7 @@ cpdef inline object get_timezone(object tz):
                 return tz
 
 
-cpdef inline object maybe_get_tz(object tz):
+cpdef inline tzinfo maybe_get_tz(object tz):
     """
     (Maybe) Construct a timezone object from a string. If tz is a string, use
     it to construct a timezone object. Otherwise, just return tz.
@@ -105,6 +102,12 @@ cpdef inline object maybe_get_tz(object tz):
             tz = pytz.timezone(tz)
     elif is_integer_object(tz):
         tz = pytz.FixedOffset(tz / 60)
+    elif isinstance(tz, tzinfo):
+        pass
+    elif tz is None:
+        pass
+    else:
+        raise TypeError(type(tz))
     return tz
 
 
@@ -156,7 +159,7 @@ cdef inline object tz_cache_key(tzinfo tz):
 # UTC Offsets
 
 
-cdef get_utcoffset(tzinfo tz, obj):
+cdef timedelta get_utcoffset(tzinfo tz, datetime obj):
     try:
         return tz._utcoffset
     except AttributeError:
