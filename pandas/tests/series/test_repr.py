@@ -184,9 +184,7 @@ class TestSeriesRepr:
         index = Index(
             [datetime(2000, 1, 1) + timedelta(i) for i in range(1000)], dtype=object
         )
-        with tm.assert_produces_warning(FutureWarning):
-            # Index.is_all_dates deprecated
-            ts = Series(np.random.randn(len(index)), index)
+        ts = Series(np.random.randn(len(index)), index)
         repr(ts)
 
         ts = tm.makeTimeSeries(1000)
@@ -251,7 +249,7 @@ class TestCategoricalRepr:
             def __repr__(self) -> str:
                 return self.name + ", " + self.state
 
-        cat = pd.Categorical([County() for _ in range(61)])
+        cat = Categorical([County() for _ in range(61)])
         idx = Index(cat)
         ser = idx.to_series()
 
