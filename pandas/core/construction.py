@@ -343,8 +343,7 @@ def array(
     elif is_timedelta64_ns_dtype(dtype):
         return TimedeltaArray._from_sequence(data, dtype=dtype, copy=copy)
 
-    result = PandasArray._from_sequence(data, dtype=dtype, copy=copy)
-    return result
+    return PandasArray._from_sequence(data, dtype=dtype, copy=copy)
 
 
 def extract_array(obj: object, extract_numpy: bool = False) -> Union[Any, ArrayLike]:
@@ -615,8 +614,11 @@ def _try_cast(arr, dtype: Optional[DtypeObj], copy: bool, raise_cast_failure: bo
     except OutOfBoundsDatetime:
         # in case of out of bound datetime64 -> always raise
         raise
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as err:
         if dtype is not None and raise_cast_failure:
+            raise
+        elif "Cannot cast" in str(err):
+            # via _disallow_mismatched_datetimelike
             raise
         else:
             subarr = np.array(arr, dtype=object, copy=copy)
