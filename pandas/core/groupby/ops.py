@@ -44,6 +44,7 @@ from pandas.core.dtypes.common import (
     ensure_float64,
     ensure_int64,
     ensure_platform_int,
+    is_1d_only_ea_obj,
     is_bool_dtype,
     is_categorical_dtype,
     is_complex_dtype,
@@ -56,7 +57,6 @@ from pandas.core.dtypes.common import (
     needs_i8_conversion,
 )
 from pandas.core.dtypes.dtypes import ExtensionDtype
-from pandas.core.dtypes.generic import ABCCategoricalIndex
 from pandas.core.dtypes.missing import (
     isna,
     maybe_fill,
@@ -89,6 +89,7 @@ from pandas.core.groupby import (
     grouper,
 )
 from pandas.core.indexes.api import (
+    CategoricalIndex,
     Index,
     MultiIndex,
     ensure_index,
@@ -368,8 +369,7 @@ class WrappedCythonOp:
                 return res_values
 
             # otherwise res_values has the same dtype as original values
-            result = type(orig_values)(res_values)
-            return result
+            return type(orig_values)(res_values)
 
         elif isinstance(values.dtype, (BooleanDtype, _IntegerDtype)):
             # IntegerArray or BooleanArray
@@ -600,9 +600,11 @@ class WrappedCythonOp:
         if values.ndim > 2:
             raise NotImplementedError("number of dimensions is currently limited to 2")
         elif values.ndim == 2:
+            assert axis == 1, axis
+        elif not is_1d_only_ea_obj(values):
             # Note: it is *not* the case that axis is always 0 for 1-dim values,
             #  as we can have 1D ExtensionArrays that we need to treat as 2D
-            assert axis == 1, axis
+            assert axis == 0
 
         dtype = values.dtype
         is_numeric = is_numeric_dtype(dtype)
@@ -662,6 +664,8 @@ class BaseGrouper:
 
     """
 
+    axis: Index
+
     def __init__(
         self,
         axis: Index,
@@ -674,7 +678,6 @@ class BaseGrouper:
     ):
         assert isinstance(axis, Index), axis
 
-        self._filter_empty_groups = self.compressed = len(groupings) != 1
         self.axis = axis
         self._groupings: list[grouper.Grouping] = list(groupings)
         self.sort = sort
@@ -820,9 +823,7 @@ class BaseGrouper:
     @cache_readonly
     def indices(self):
         """ dict {group name -> group indices} """
-        if len(self.groupings) == 1 and isinstance(
-            self.result_index, ABCCategoricalIndex
-        ):
+        if len(self.groupings) == 1 and isinstance(self.result_index, CategoricalIndex):
             # This shows unused categories in indices GH#38642
             return self.groupings[0].indices
         codes_list = [ping.codes for ping in self.groupings]
@@ -911,7 +912,7 @@ class BaseGrouper:
 
     @cache_readonly
     def result_index(self) -> Index:
-        if not self.compressed and len(self.groupings) == 1:
+        if len(self.groupings) == 1:
             return self.groupings[0].result_index.rename(self.names[0])
 
         codes = self.reconstructed_codes
@@ -922,7 +923,9 @@ class BaseGrouper:
 
     @final
     def get_group_levels(self) -> list[Index]:
-        if not self.compressed and len(self.groupings) == 1:
+        # Note: only called from _insert_inaxis_grouper_inplace, which
+        #  is only called for BaseGrouper, never for BinGrouper
+        if len(self.groupings) == 1:
             return [self.groupings[0].result_index]
 
         name_list = []
@@ -1038,7 +1041,7 @@ class BaseGrouper:
 
             if not initialized:
                 # We only do this validation on the first iteration
-                libreduction.check_result_array(res)
+                libreduction.check_result_array(res, group.dtype)
                 initialized = True
 
             counts[i] = group.shape[0]
@@ -1089,7 +1092,6 @@ class BinGrouper(BaseGrouper):
     ):
         self.bins = ensure_int64(bins)
         self.binlabels = ensure_index(binlabels)
-        self._filter_empty_groups = False
         self.mutated = mutated
         self.indexer = indexer
 
@@ -1199,10 +1201,9 @@ class BinGrouper(BaseGrouper):
 
     @property
     def groupings(self) -> list[grouper.Grouping]:
-        return [
-            grouper.Grouping(lvl, lvl, in_axis=False, level=None, name=name)
-            for lvl, name in zip(self.levels, self.names)
-        ]
+        lev = self.binlabels
+        ping = grouper.Grouping(lev, lev, in_axis=False, level=None, name=lev.name)
+        return [ping]
 
     def _aggregate_series_fast(
         self, obj: Series, func: F
