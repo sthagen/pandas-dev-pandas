@@ -17,6 +17,7 @@ from io import (
 )
 import mmap
 import os
+import tempfile
 from typing import (
     IO,
     Any,
@@ -738,6 +739,12 @@ def get_handle(
             isinstance(ioargs.filepath_or_buffer, str) or ioargs.should_close
         )
 
+    if "r" in ioargs.mode and not hasattr(handle, "read"):
+        raise TypeError(
+            "Expected file path name or file-like object, "
+            f"got {type(ioargs.filepath_or_buffer)} type"
+        )
+
     handles.reverse()  # close the most recently added buffer first
     if ioargs.should_close:
         assert not isinstance(ioargs.filepath_or_buffer, str)
@@ -993,8 +1000,15 @@ def _is_binary_mode(handle: FilePathOrBuffer, mode: str) -> bool:
     if "t" in mode or "b" in mode:
         return "b" in mode
 
-    # classes that expect string but have 'b' in mode
-    text_classes = (codecs.StreamWriter, codecs.StreamReader, codecs.StreamReaderWriter)
+    # exceptions
+    text_classes = (
+        # classes that expect string but have 'b' in mode
+        codecs.StreamWriter,
+        codecs.StreamReader,
+        codecs.StreamReaderWriter,
+        # cannot be wrapped in TextIOWrapper GH43439
+        tempfile.SpooledTemporaryFile,
+    )
     if issubclass(type(handle), text_classes):
         return False
 
