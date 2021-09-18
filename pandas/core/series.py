@@ -122,6 +122,7 @@ from pandas.core.indexes.api import (
     MultiIndex,
     PeriodIndex,
     TimedeltaIndex,
+    default_index,
     ensure_index,
 )
 import pandas.core.indexes.base as ibase
@@ -425,7 +426,7 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
             if index is None:
                 if not is_list_like(data):
                     data = [data]
-                index = ibase.default_index(len(data))
+                index = default_index(len(data))
             elif is_list_like(data):
                 com.require_length_match(data, index)
 
@@ -1424,7 +1425,7 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         if drop:
-            new_index = ibase.default_index(len(self))
+            new_index = default_index(len(self))
             if level is not None:
                 if not isinstance(level, (tuple, list)):
                     level = [level]
@@ -1740,12 +1741,19 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
         1    b
         2    c
         """
+        columns: Index
         if name is None:
-            df = self._constructor_expanddim(self)
+            name = self.name
+            if name is None:
+                # default to [0], same as we would get with DataFrame(self)
+                columns = default_index(1)
+            else:
+                columns = Index([name])
         else:
-            df = self._constructor_expanddim({name: self})
+            columns = Index([name])
 
-        return df
+        mgr = self._mgr.to_2d_mgr(columns)
+        return self._constructor_expanddim(mgr)
 
     def _set_name(self, name, inplace=False) -> Series:
         """
@@ -3459,7 +3467,7 @@ Keep all original rows and also all original values
         )
 
         if ignore_index:
-            result.index = ibase.default_index(len(sorted_index))
+            result.index = default_index(len(sorted_index))
 
         if inplace:
             self._update_inplace(result)
@@ -4032,7 +4040,7 @@ Keep all original rows and also all original values
         values, counts = reshape.explode(np.asarray(self._values))
 
         if ignore_index:
-            index = ibase.default_index(len(values))
+            index = default_index(len(values))
         else:
             index = self.index.repeat(counts)
 
