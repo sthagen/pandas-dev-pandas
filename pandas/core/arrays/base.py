@@ -130,6 +130,7 @@ class ExtensionArray:
     searchsorted
     shift
     take
+    tolist
     unique
     view
     _concat_same_type
@@ -1348,6 +1349,22 @@ class ExtensionArray:
     # ------------------------------------------------------------------------
     # Non-Optimized Default Methods
 
+    def tolist(self) -> list:
+        """
+        Return a list of the values.
+
+        These are each a scalar type, which is a Python scalar
+        (for str, int, float) or a pandas scalar
+        (for Timestamp/Timedelta/Interval/Period)
+
+        Returns
+        -------
+        list
+        """
+        if self.ndim > 1:
+            return [x.tolist() for x in self]
+        return list(self)
+
     def delete(self: ExtensionArrayT, loc: PositionalIndexer) -> ExtensionArrayT:
         indexer = np.delete(np.arange(len(self)), loc)
         return self.take(indexer)
@@ -1378,6 +1395,11 @@ class ExtensionArray:
         )
         if result is not NotImplemented:
             return result
+
+        if "out" in kwargs:
+            return arraylike.dispatch_ufunc_with_out(
+                self, ufunc, method, *inputs, **kwargs
+            )
 
         return arraylike.default_array_ufunc(self, ufunc, method, *inputs, **kwargs)
 

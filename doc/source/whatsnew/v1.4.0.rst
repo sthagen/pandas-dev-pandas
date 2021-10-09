@@ -390,6 +390,7 @@ Datetimelike
 - Bug in :func:`to_datetime` with ``format`` and ``pandas.NA`` was raising ``ValueError`` (:issue:`42957`)
 - :func:`to_datetime` would silently swap ``MM/DD/YYYY`` and ``DD/MM/YYYY`` formats if the given ``dayfirst`` option could not be respected - now, a warning is raised in the case of delimited date strings (e.g. ``31-12-2012``) (:issue:`12585`)
 - Bug in :meth:`date_range` and :meth:`bdate_range` do not return right bound when ``start`` = ``end`` and set is closed on one side (:issue:`43394`)
+- Bug in inplace addition and subtraction of :class:`DatetimeIndex` or :class:`TimedeltaIndex` with :class:`DatetimeArray` or :class:`TimedeltaArray` (:issue:`43904`)
 -
 
 Timedelta
@@ -501,6 +502,7 @@ Groupby/resample/rolling
 - Bug in :meth:`DataFrame.groupby.rolling` when specifying ``on`` and calling ``__getitem__`` would subsequently return incorrect results (:issue:`43355`)
 - Bug in :meth:`GroupBy.apply` with time-based :class:`Grouper` objects incorrectly raising ``ValueError`` in corner cases where the grouping vector contains a ``NaT`` (:issue:`43500`, :issue:`43515`)
 - Bug in :meth:`GroupBy.mean` failing with ``complex`` dtype (:issue:`43701`)
+- Fixed bug in :meth:`Series.rolling` and :meth:`DataFrame.rolling` not calculating window bounds correctly for the first row when ``center=True`` and index is decreasing (:issue:`43927`)
 
 Reshaping
 ^^^^^^^^^
