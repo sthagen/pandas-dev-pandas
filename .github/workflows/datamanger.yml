@@ -3,12 +3,14 @@ name: Data Manager
 on:
   push:
     branches:
-      - master
+      - main
       - 1.4.x
   pull_request:
     branches:
-      - master
+      - main
       - 1.4.x
+    paths-ignore:
+      - "doc/**"
 
 env:
   ENV_FILE: environment.yml

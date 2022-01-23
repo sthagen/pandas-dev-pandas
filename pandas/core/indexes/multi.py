@@ -365,7 +365,9 @@ class MultiIndex(Index):
         """
         null_mask = isna(level)
         if np.any(null_mask):
-            code = np.where(null_mask[code], -1, code)
+            # Incompatible types in assignment (expression has type
+            # "ndarray[Any, dtype[Any]]", variable has type "List[Any]")
+            code = np.where(null_mask[code], -1, code)  # type: ignore[assignment]
         return code
 
     def _verify_integrity(self, codes: list | None = None, levels: list | None = None):
@@ -1086,7 +1088,9 @@ class MultiIndex(Index):
         # equivalent to sorting lexicographically the codes themselves. Notice
         # that each level needs to be shifted by the number of bits needed to
         # represent the _previous_ ones:
-        offsets = np.concatenate([lev_bits[1:], [0]]).astype("uint64")
+        offsets = np.concatenate([lev_bits[1:], [0]]).astype(  # type: ignore[arg-type]
+            "uint64"
+        )
 
         # Check the total number of bits needed for our representation:
         if lev_bits[0] > 64:
@@ -1553,7 +1557,7 @@ class MultiIndex(Index):
         if any(-1 in code for code in self.codes):
             return False
 
-        if all(level.is_monotonic for level in self.levels):
+        if all(level.is_monotonic_increasing for level in self.levels):
             # If each level is sorted, we can operate on the codes directly. GH27495
             return libalgos.is_lexsorted(
                 [x.astype("int64", copy=False) for x in self.codes]
@@ -1564,12 +1568,17 @@ class MultiIndex(Index):
             self._get_level_values(i)._values for i in reversed(range(len(self.levels)))
         ]
         try:
-            sort_order = np.lexsort(values)
-            return Index(sort_order).is_monotonic
+            # Argument 1 to "lexsort" has incompatible type "List[Union[ExtensionArray,
+            # ndarray[Any, Any]]]"; expected "Union[_SupportsArray[dtype[Any]],
+            # _NestedSequence[_SupportsArray[dtype[Any]]], bool,
+            #  int, float, complex, str, bytes, _NestedSequence[Union[bool, int, float,
+            #  complex, str, bytes]]]"  [arg-type]
+            sort_order = np.lexsort(values)  # type: ignore[arg-type]
+            return Index(sort_order).is_monotonic_increasing
         except TypeError:
 
             # we have mixed types and np.lexsort is not happy
-            return Index(self._values).is_monotonic
+            return Index(self._values).is_monotonic_increasing
 
     @cache_readonly
     def is_monotonic_decreasing(self) -> bool:
@@ -1701,7 +1710,12 @@ class MultiIndex(Index):
             level = self._get_level_number(level)
             return self._get_level_values(level=level, unique=True)
 
-    def to_frame(self, index: bool = True, name=lib.no_default) -> DataFrame:
+    def to_frame(
+        self,
+        index: bool = True,
+        name=lib.no_default,
+        allow_duplicates: bool = False,
+    ) -> DataFrame:
         """
         Create a DataFrame with the levels of the MultiIndex as columns.
 
@@ -1715,6 +1729,11 @@ class MultiIndex(Index):
 
         name : list / sequence of str, optional
             The passed names should substitute index level names.
+
+        allow_duplicates : bool, optional default False
+            Allow duplicate column labels to be created.
+
+            .. versionadded:: 1.5.0
 
         Returns
         -------
@@ -1753,6 +1772,17 @@ class MultiIndex(Index):
         """
         from pandas import DataFrame
 
+        if name is None:
+            warnings.warn(
+                "Explicitly passing `name=None` currently preserves the Index's name "
+                "or uses a default name of 0. This behaviour is deprecated, and in "
+                "the future `None` will be used as the name of the resulting "
+                "DataFrame column.",
+                FutureWarning,
+                stacklevel=find_stack_level(),
+            )
+            name = lib.no_default
+
         if name is not lib.no_default:
             if not is_list_like(name):
                 raise TypeError("'name' must be a list / sequence of column names.")
@@ -1763,16 +1793,19 @@ class MultiIndex(Index):
                 )
             idx_names = name
         else:
-            idx_names = self.names
+            idx_names = self._get_level_names()
+
+        if not allow_duplicates and len(set(idx_names)) != len(idx_names):
+            raise ValueError(
+                "Cannot create duplicate column labels if allow_duplicates is False"
+            )
 
         # Guarantee resulting column order - PY36+ dict maintains insertion order
         result = DataFrame(
-            {
-                (level if lvlname is None else lvlname): self._get_level_values(level)
-                for lvlname, level in zip(idx_names, range(len(self.levels)))
-            },
+            {level: self._get_level_values(level) for level in range(len(self.levels))},
             copy=False,
         )
+        result.columns = idx_names
 
         if index:
             result.index = self
@@ -1913,7 +1946,7 @@ class MultiIndex(Index):
                     ('b', 'bb')],
                    )
         """
-        if self._is_lexsorted() and self.is_monotonic:
+        if self._is_lexsorted() and self.is_monotonic_increasing:
             return self
 
         new_levels = []
@@ -1921,7 +1954,7 @@ class MultiIndex(Index):
 
         for lev, level_codes in zip(self.levels, self.codes):
 
-            if not lev.is_monotonic:
+            if not lev.is_monotonic_increasing:
                 try:
                     # indexer to reorder the levels
                     indexer = lev.argsort()
