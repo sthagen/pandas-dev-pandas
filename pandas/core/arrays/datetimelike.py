@@ -37,6 +37,7 @@ from pandas._libs.tslibs import (
     delta_to_nanoseconds,
     iNaT,
     ints_to_pydatetime,
+    ints_to_pytimedelta,
     to_offset,
 )
 from pandas._libs.tslibs.fields import (
@@ -388,11 +389,16 @@ class DatetimeLikeArrayMixin(OpsMixin, NDArrayBackedExtensionArray):
         # to a period in from_sequence). For DatetimeArray, it's Timestamp...
         # I don't know if mypy can do that, possibly with Generics.
         # https://mypy.readthedocs.io/en/latest/generics.html
+
         no_op = check_setitem_lengths(key, value, self)
+
+        # Calling super() before the no_op short-circuit means that we raise
+        #  on invalid 'value' even if this is a no-op, e.g. wrong-dtype empty array.
+        super().__setitem__(key, value)
+
         if no_op:
             return
 
-        super().__setitem__(key, value)
         self._maybe_clear_freq()
 
     def _maybe_clear_freq(self):
@@ -419,6 +425,11 @@ class DatetimeLikeArrayMixin(OpsMixin, NDArrayBackedExtensionArray):
                     freq=self.freq,
                     box="timestamp",
                 )
+                return converted.reshape(self.shape)
+
+            elif self.dtype.kind == "m":
+                i8data = self.asi8.ravel()
+                converted = ints_to_pytimedelta(i8data, box=True)
                 return converted.reshape(self.shape)
 
             return self._box_values(self.asi8.ravel()).reshape(self.shape)
