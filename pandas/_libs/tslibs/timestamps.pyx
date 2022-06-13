@@ -54,6 +54,7 @@ from pandas._libs.tslibs.conversion cimport (
     maybe_localize_tso,
 )
 from pandas._libs.tslibs.dtypes cimport (
+    get_conversion_factor,
     npy_unit_to_abbrev,
     periods_per_day,
     periods_per_second,
@@ -86,6 +87,7 @@ from pandas._libs.tslibs.np_datetime cimport (
     dt64_to_dtstruct,
     get_datetime64_unit,
     get_datetime64_value,
+    get_unit_from_dtype,
     npy_datetimestruct,
     pandas_datetime_to_datetimestruct,
     pydatetime_to_dt64,
@@ -854,12 +856,11 @@ cdef class _Timestamp(ABCTimestamp):
             local_val = self._maybe_convert_value_to_local()
             int64_t normalized
             int64_t ppd = periods_per_day(self._reso)
-
-        if self._reso != NPY_FR_ns:
-            raise NotImplementedError(self._reso)
+            _Timestamp ts
 
         normalized = normalize_i8_stamp(local_val, ppd)
-        return Timestamp(normalized).tz_localize(self.tzinfo)
+        ts = type(self)._from_value_and_reso(normalized, reso=self._reso, tz=None)
+        return ts.tz_localize(self.tzinfo)
 
     # -----------------------------------------------------------------
     # Pickle Methods
@@ -999,6 +1000,42 @@ cdef class _Timestamp(ABCTimestamp):
 
     # -----------------------------------------------------------------
     # Conversion Methods
+
+    # TODO: share with _Timedelta?
+    @cython.cdivision(False)
+    cdef _Timestamp _as_reso(self, NPY_DATETIMEUNIT reso, bint round_ok=True):
+        cdef:
+            int64_t value, mult, div, mod
+
+        if reso == self._reso:
+            return self
+
+        if reso < self._reso:
+            # e.g. ns -> us
+            mult = get_conversion_factor(reso, self._reso)
+            div, mod = divmod(self.value, mult)
+            if mod > 0 and not round_ok:
+                raise ValueError("Cannot losslessly convert units")
+
+            # Note that when mod > 0, we follow np.datetime64 in always
+            #  rounding down.
+            value = div
+        else:
+            mult = get_conversion_factor(self._reso, reso)
+            with cython.overflowcheck(True):
+                # Note: caller is responsible for re-raising as OutOfBoundsDatetime
+                value = self.value * mult
+        return type(self)._from_value_and_reso(value, reso=reso, tz=self.tzinfo)
+
+    def _as_unit(self, str unit, bint round_ok=True):
+        dtype = np.dtype(f"M8[{unit}]")
+        reso = get_unit_from_dtype(dtype)
+        try:
+            return self._as_reso(reso, round_ok=round_ok)
+        except OverflowError as err:
+            raise OutOfBoundsDatetime(
+                f"Cannot cast {self} to unit='{unit}' without overflow."
+            ) from err
 
     @property
     def asm8(self) -> np.datetime64:
@@ -1997,6 +2034,8 @@ default 'raise'
         NaT
         """
         if self._reso != NPY_FR_ns:
+            if tz is None and self.tz is None:
+                return self
             raise NotImplementedError(self._reso)
 
         if ambiguous == 'infer':
