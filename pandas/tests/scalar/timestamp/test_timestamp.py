@@ -22,6 +22,8 @@ from pandas._libs.tslibs.dtypes import NpyDatetimeUnit
 from pandas._libs.tslibs.timezones import (
     dateutil_gettz as gettz,
     get_timezone,
+    maybe_get_tz,
+    tz_compare,
 )
 from pandas.errors import OutOfBoundsDatetime
 import pandas.util._test_decorators as td
@@ -763,6 +765,16 @@ class TestNonNano:
         alt = Timestamp(dt64)
         assert ts.month_name() == alt.month_name()
 
+    def test_tz_convert(self, ts):
+        ts = Timestamp._from_value_and_reso(ts.value, ts._reso, utc)
+
+        tz = pytz.timezone("US/Pacific")
+        result = ts.tz_convert(tz)
+
+        assert isinstance(result, Timestamp)
+        assert result._reso == ts._reso
+        assert tz_compare(result.tz, tz)
+
     def test_repr(self, dt64, ts):
         alt = Timestamp(dt64)
 
@@ -825,7 +837,10 @@ class TestNonNano:
 
         assert other.asm8 < ts
 
-    def test_pickle(self, ts):
+    def test_pickle(self, ts, tz_aware_fixture):
+        tz = tz_aware_fixture
+        tz = maybe_get_tz(tz)
+        ts = Timestamp._from_value_and_reso(ts.value, ts._reso, tz)
         rt = tm.round_trip_pickle(ts)
         assert rt._reso == ts._reso
         assert rt == ts
@@ -858,6 +873,29 @@ class TestNonNano:
     def test_to_period(self, dt64, ts):
         alt = Timestamp(dt64)
         assert ts.to_period("D") == alt.to_period("D")
+
+    @pytest.mark.parametrize(
+        "td", [timedelta(days=4), Timedelta(days=4), np.timedelta64(4, "D")]
+    )
+    def test_addsub_timedeltalike_non_nano(self, dt64, ts, td):
+
+        result = ts - td
+        expected = Timestamp(dt64) - td
+        assert isinstance(result, Timestamp)
+        assert result._reso == ts._reso
+        assert result == expected
+
+        result = ts + td
+        expected = Timestamp(dt64) + td
+        assert isinstance(result, Timestamp)
+        assert result._reso == ts._reso
+        assert result == expected
+
+        result = td + ts
+        expected = td + Timestamp(dt64)
+        assert isinstance(result, Timestamp)
+        assert result._reso == ts._reso
+        assert result == expected
 
 
 class TestAsUnit:

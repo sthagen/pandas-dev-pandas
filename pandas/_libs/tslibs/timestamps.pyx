@@ -157,14 +157,7 @@ cdef inline _Timestamp create_timestamp_from_ts(
 
 def _unpickle_timestamp(value, freq, tz, reso=NPY_FR_ns):
     # GH#41949 dont warn on unpickle if we have a freq
-    if reso == NPY_FR_ns:
-        ts = Timestamp(value, tz=tz)
-    else:
-        if tz is not None:
-            raise NotImplementedError
-        abbrev = npy_unit_to_abbrev(reso)
-        dt64 = np.datetime64(value, abbrev)
-        ts = Timestamp._from_dt64(dt64)
+    ts = Timestamp._from_value_and_reso(value, reso, tz)
     ts._set_freq(freq)
     return ts
 
@@ -370,9 +363,6 @@ cdef class _Timestamp(ABCTimestamp):
         cdef:
             int64_t nanos = 0
 
-        if isinstance(self, _Timestamp) and self._reso != NPY_FR_ns:
-            raise NotImplementedError(self._reso)
-
         if is_any_td_scalar(other):
             if is_timedelta64_object(other):
                 other_reso = get_datetime64_unit(other)
@@ -390,19 +380,30 @@ cdef class _Timestamp(ABCTimestamp):
                     # TODO: no tests get here
                     other = ensure_td64ns(other)
 
+            # TODO: what to do with mismatched resos?
             # TODO: disallow round_ok
             nanos = delta_to_nanoseconds(
                 other, reso=self._reso, round_ok=True
             )
             try:
-                result = type(self)(self.value + nanos, tz=self.tzinfo)
+                new_value = self.value + nanos
             except OverflowError:
                 # Use Python ints
                 # Hit in test_tdi_add_overflow
-                result = type(self)(int(self.value) + int(nanos), tz=self.tzinfo)
+                new_value = int(self.value) + int(nanos)
+
+            try:
+                result = type(self)._from_value_and_reso(new_value, reso=self._reso, tz=self.tzinfo)
+            except OverflowError as err:
+                # TODO: don't hard-code nanosecond here
+                raise OutOfBoundsDatetime(f"Out of bounds nanosecond timestamp: {new_value}") from err
+
             if result is not NaT:
                 result._set_freq(self._freq)  # avoid warning in constructor
             return result
+
+        elif isinstance(self, _Timestamp) and self._reso != NPY_FR_ns:
+            raise NotImplementedError(self._reso)
 
         elif is_integer_object(other):
             raise integer_op_not_supported(self)
@@ -431,12 +432,15 @@ cdef class _Timestamp(ABCTimestamp):
         return NotImplemented
 
     def __sub__(self, other):
-        if isinstance(self, _Timestamp) and self._reso != NPY_FR_ns:
-            raise NotImplementedError(self._reso)
+        if other is NaT:
+            return NaT
 
-        if is_any_td_scalar(other) or is_integer_object(other):
+        elif is_any_td_scalar(other) or is_integer_object(other):
             neg_other = -other
             return self + neg_other
+
+        elif isinstance(self, _Timestamp) and self._reso != NPY_FR_ns:
+            raise NotImplementedError(self._reso)
 
         elif is_array(other):
             if other.dtype.kind in ['i', 'u']:
@@ -449,9 +453,6 @@ cdef class _Timestamp(ABCTimestamp):
                     dtype=object,
                 )
             return NotImplemented
-
-        if other is NaT:
-            return NaT
 
         # coerce if necessary if we are a Timestamp-like
         if (PyDateTime_Check(self)
@@ -2113,8 +2114,6 @@ default 'raise'
         >>> pd.NaT.tz_convert(tz='Asia/Tokyo')
         NaT
         """
-        if self._reso != NPY_FR_ns:
-            raise NotImplementedError(self._reso)
 
         if self.tzinfo is None:
             # tz naive, use tz_localize
@@ -2123,7 +2122,8 @@ default 'raise'
             )
         else:
             # Same UTC timestamp, different time zone
-            out = Timestamp(self.value, tz=tz)
+            tz = maybe_get_tz(tz)
+            out = type(self)._from_value_and_reso(self.value, reso=self._reso, tz=tz)
             if out is not NaT:
                 out._set_freq(self._freq)  # avoid warning in constructor
             return out
@@ -2195,9 +2195,6 @@ default 'raise'
             datetime ts_input
             tzinfo_type tzobj
 
-        if self._reso != NPY_FR_ns:
-            raise NotImplementedError(self._reso)
-
         # set to naive if needed
         tzobj = self.tzinfo
         value = self.value
@@ -2210,7 +2207,7 @@ default 'raise'
             value = tz_convert_from_utc_single(value, tzobj, reso=self._reso)
 
         # setup components
-        dt64_to_dtstruct(value, &dts)
+        pandas_datetime_to_datetimestruct(value, self._reso, &dts)
         dts.ps = self.nanosecond * 1000
 
         # replace
@@ -2257,12 +2254,16 @@ default 'raise'
                       'fold': fold}
             ts_input = datetime(**kwargs)
 
-        ts = convert_datetime_to_tsobject(ts_input, tzobj)
+        ts = convert_datetime_to_tsobject(ts_input, tzobj, nanos=0, reso=self._reso)
+        # TODO: passing nanos=dts.ps // 1000 causes a RecursionError in
+        #  TestTimestampConstructors.test_constructor; not clear why
         value = ts.value + (dts.ps // 1000)
         if value != NPY_NAT:
-            check_dts_bounds(&dts)
+            check_dts_bounds(&dts, self._reso)
 
-        return create_timestamp_from_ts(value, dts, tzobj, self._freq, fold)
+        return create_timestamp_from_ts(
+            value, dts, tzobj, self._freq, fold, reso=self._reso
+        )
 
     def to_julian_date(self) -> np.float64:
         """
