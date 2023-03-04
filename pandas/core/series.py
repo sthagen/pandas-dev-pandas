@@ -34,6 +34,7 @@ from pandas._libs import (
     properties,
     reshape,
 )
+from pandas._libs.internals import BlockValuesRefs
 from pandas._libs.lib import (
     is_range_indexer,
     no_default,
@@ -733,6 +734,12 @@ class Series(base.IndexOpsMixin, NDFrame):  # type: ignore[misc]
 
         """
         return self._mgr.internal_values()
+
+    @property
+    def _references(self) -> BlockValuesRefs | None:
+        if isinstance(self._mgr, SingleArrayManager):
+            return None
+        return self._mgr._block.refs
 
     # error: Decorated property not supported
     @Appender(base.IndexOpsMixin.array.__doc__)  # type: ignore[misc]
@@ -1969,7 +1976,7 @@ Name: Max Speed, dtype: float64
         level: IndexLabel = None,
         as_index: bool = True,
         sort: bool = True,
-        group_keys: bool | lib.NoDefault = no_default,
+        group_keys: bool = True,
         observed: bool = False,
         dropna: bool = True,
     ) -> SeriesGroupBy:

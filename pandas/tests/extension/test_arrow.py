@@ -1394,6 +1394,11 @@ def test_mode_dropna_false_mode_na(data):
     tm.assert_series_equal(result, expected)
 
 
+@pytest.mark.parametrize("arrow_dtype", [pa.binary(), pa.binary(16), pa.large_binary()])
+def test_arrow_dtype_type(arrow_dtype):
+    assert ArrowDtype(arrow_dtype).type == bytes
+
+
 def test_is_bool_dtype():
     # GH 22667
     data = ArrowExtensionArray(pa.array([True, False, True]))
@@ -2144,3 +2149,15 @@ def test_dt_tz_localize(unit):
         dtype=ArrowDtype(pa.timestamp(unit, "US/Pacific")),
     )
     tm.assert_series_equal(result, expected)
+
+
+@pytest.mark.parametrize("skipna", [True, False])
+def test_boolean_reduce_series_all_null(all_boolean_reductions, skipna):
+    # GH51624
+    ser = pd.Series([None], dtype="float64[pyarrow]")
+    result = getattr(ser, all_boolean_reductions)(skipna=skipna)
+    if skipna:
+        expected = all_boolean_reductions == "all"
+    else:
+        expected = pd.NA
+    assert result is expected
