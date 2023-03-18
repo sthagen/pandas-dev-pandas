@@ -497,8 +497,6 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
 
     # ----------------------------------------------------------------------
     # Axis
-    _stat_axis_number = 0
-    _stat_axis_name = "index"
     _AXIS_ORDERS: list[Literal["index", "columns"]]
     _AXIS_TO_AXIS_NUMBER: dict[Axis, AxisInt] = {0: 0, "index": 0, "rows": 0}
     _info_axis_number: int
@@ -607,10 +605,6 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
     @property
     def _info_axis(self) -> Index:
         return getattr(self, self._info_axis_name)
-
-    @property
-    def _stat_axis(self) -> Index:
-        return getattr(self, self._stat_axis_name)
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -3650,9 +3644,14 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
             sequence should be given if the object uses MultiIndex. If
             False do not print fields for index names. Use index_label=False
             for easier importing in R.
-        mode : str, default 'w'
-            Python write mode. The available write modes are the same as
-            :py:func:`open`.
+        mode : {{'w', 'x', 'a'}}, default 'w'
+            Forwarded to either `open(mode=)` or `fsspec.open(mode=)` to control
+            the file opening. Typical values include:
+
+            - 'w', truncate the file first.
+            - 'x', exclusive creation, failing if the file already exists.
+            - 'a', append to the end of file if it exists.
+
         encoding : str, optional
             A string representing the encoding to use in the output file,
             defaults to 'utf-8'. `encoding` is not supported if `path_or_buf`
@@ -5848,7 +5847,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         fish           0          0                  8
         """  # noqa:E501
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
 
         axis = self._get_axis_number(axis)
         obj_len = self.shape[axis]
@@ -8456,7 +8455,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         2018-04-10 12:00:00  4
         """
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
         axis = self._get_axis_number(axis)
 
         index = self._get_axis(axis)
@@ -8536,7 +8535,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         2018-04-12 01:00:00  4
         """
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
         axis = self._get_axis_number(axis)
 
         index = self._get_axis(axis)
@@ -10368,7 +10367,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         2016-01-10 23:59:59  1
         """
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
         axis = self._get_axis_number(axis)
         ax = self._get_axis(axis)
 
@@ -11040,7 +11039,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         GOOG  0.179241  0.094112   NaN
         APPL -0.252395 -0.011860   NaN
         """
-        axis = self._get_axis_number(kwargs.pop("axis", self._stat_axis_name))
+        axis = self._get_axis_number(kwargs.pop("axis", "index"))
         if fill_method is None:
             data = self
         else:
@@ -11135,7 +11134,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
     ):
         skipna = nv.validate_cum_func_with_skipna(skipna, args, kwargs, name)
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
         else:
             axis = self._get_axis_number(axis)
 
@@ -11190,7 +11189,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         nv.validate_stat_ddof_func((), kwargs, fname=name)
         validate_bool_kwarg(skipna, "skipna", none_allowed=False)
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
 
         return self._reduce(
             func, name, axis=axis, numeric_only=numeric_only, skipna=skipna, ddof=ddof
@@ -11352,7 +11351,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         validate_bool_kwarg(skipna, "skipna", none_allowed=False)
 
         if axis is None:
-            axis = self._stat_axis_number
+            axis = 0
 
         return self._reduce(
             func,
@@ -12033,7 +12032,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
     # Arithmetic Methods
 
     @final
-    def _inplace_method(self, other, op):
+    def _inplace_method(self, other, op) -> Self:
         """
         Wrap arithmetic method to operate inplace.
         """
