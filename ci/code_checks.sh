@@ -119,10 +119,8 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.errors.AccessorRegistrationWarning \
         pandas.errors.AttributeConflictWarning \
         pandas.errors.DataError \
-        pandas.errors.EmptyDataError \
         pandas.errors.IncompatibilityWarning \
         pandas.errors.InvalidComparison \
-        pandas.errors.InvalidIndexError \
         pandas.errors.InvalidVersion \
         pandas.errors.IntCastingNaNError \
         pandas.errors.LossySetitemError \
@@ -172,8 +170,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.Period.asfreq \
         pandas.Period.now \
         pandas.arrays.PeriodArray \
-        pandas.arrays.IntervalArray.from_arrays \
-        pandas.arrays.IntervalArray.to_tuples \
         pandas.Int8Dtype \
         pandas.Int16Dtype \
         pandas.Int32Dtype \
@@ -183,8 +179,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.UInt32Dtype \
         pandas.UInt64Dtype \
         pandas.NA \
-        pandas.Float32Dtype \
-        pandas.Float64Dtype \
         pandas.CategoricalDtype.categories \
         pandas.CategoricalDtype.ordered \
         pandas.Categorical.dtype \
@@ -260,9 +254,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.util.hash_pandas_object \
         pandas_object \
         pandas.api.interchange.from_dataframe \
-        pandas.Index.T \
-        pandas.Index.memory_usage \
-        pandas.Index.copy \
         pandas.Index.drop \
         pandas.Index.identical \
         pandas.Index.insert \
