@@ -159,6 +159,14 @@ class MPLPlot(ABC):
         layout=None,
         include_bool: bool = False,
         column: IndexLabel | None = None,
+        *,
+        logx: bool | None | Literal["sym"] = False,
+        logy: bool | None | Literal["sym"] = False,
+        loglog: bool | None | Literal["sym"] = False,
+        mark_right: bool = True,
+        stacked: bool = False,
+        label: Hashable | None = None,
+        style=None,
         **kwds,
     ) -> None:
         import matplotlib.pyplot as plt
@@ -230,13 +238,13 @@ class MPLPlot(ABC):
         self.legend_handles: list[Artist] = []
         self.legend_labels: list[Hashable] = []
 
-        self.logx = kwds.pop("logx", False)
-        self.logy = kwds.pop("logy", False)
-        self.loglog = kwds.pop("loglog", False)
-        self.label = kwds.pop("label", None)
-        self.style = kwds.pop("style", None)
-        self.mark_right = kwds.pop("mark_right", True)
-        self.stacked = kwds.pop("stacked", False)
+        self.logx = type(self)._validate_log_kwd("logx", logx)
+        self.logy = type(self)._validate_log_kwd("logy", logy)
+        self.loglog = type(self)._validate_log_kwd("loglog", loglog)
+        self.label = label
+        self.style = style
+        self.mark_right = mark_right
+        self.stacked = stacked
 
         # ax may be an Axes object or (if self.subplots) an ndarray of
         #  Axes objects
@@ -271,7 +279,10 @@ class MPLPlot(ABC):
 
         self.kwds = kwds
 
-        self._validate_color_args()
+        color = kwds.pop("color", lib.no_default)
+        self.color = self._validate_color_args(color, self.colormap)
+        assert "color" not in self.kwds
+
         self.data = self._ensure_frame(self.data)
 
     @final
@@ -288,6 +299,22 @@ class MPLPlot(ABC):
         elif not is_bool(sharex):
             raise TypeError("sharex must be a bool or None")
         return bool(sharex)
+
+    @classmethod
+    def _validate_log_kwd(
+        cls,
+        kwd: str,
+        value: bool | None | Literal["sym"],
+    ) -> bool | None | Literal["sym"]:
+        if (
+            value is None
+            or isinstance(value, bool)
+            or (isinstance(value, str) and value == "sym")
+        ):
+            return value
+        raise ValueError(
+            f"keyword '{kwd}' should be bool, None, or 'sym', not '{value}'"
+        )
 
     @final
     @staticmethod
@@ -396,34 +423,31 @@ class MPLPlot(ABC):
             out.append((idx_loc,))
         return out
 
-    def _validate_color_args(self):
-        if (
-            "color" in self.kwds
-            and self.nseries == 1
-            and self.kwds["color"] is not None
-            and not is_list_like(self.kwds["color"])
-        ):
+    def _validate_color_args(self, color, colormap):
+        if color is lib.no_default:
+            # It was not provided by the user
+            if "colors" in self.kwds and colormap is not None:
+                warnings.warn(
+                    "'color' and 'colormap' cannot be used simultaneously. "
+                    "Using 'color'",
+                    stacklevel=find_stack_level(),
+                )
+            return None
+        if self.nseries == 1 and color is not None and not is_list_like(color):
             # support series.plot(color='green')
-            self.kwds["color"] = [self.kwds["color"]]
+            color = [color]
 
-        if (
-            "color" in self.kwds
-            and isinstance(self.kwds["color"], tuple)
-            and self.nseries == 1
-            and len(self.kwds["color"]) in (3, 4)
-        ):
+        if isinstance(color, tuple) and self.nseries == 1 and len(color) in (3, 4):
             # support RGB and RGBA tuples in series plot
-            self.kwds["color"] = [self.kwds["color"]]
+            color = [color]
 
-        if (
-            "color" in self.kwds or "colors" in self.kwds
-        ) and self.colormap is not None:
+        if colormap is not None:
             warnings.warn(
                 "'color' and 'colormap' cannot be used simultaneously. Using 'color'",
                 stacklevel=find_stack_level(),
             )
 
-        if "color" in self.kwds and self.style is not None:
+        if self.style is not None:
             if is_list_like(self.style):
                 styles = self.style
             else:
@@ -436,6 +460,7 @@ class MPLPlot(ABC):
                         "'color' keyword argument. Please use one or the "
                         "other or pass 'style' without a color symbol"
                     )
+        return color
 
     @final
     @staticmethod
@@ -554,14 +579,6 @@ class MPLPlot(ABC):
             axes = self.ax
 
         axes = flatten_axes(axes)
-
-        valid_log = {False, True, "sym", None}
-        input_log = {self.logx, self.logy, self.loglog}
-        if input_log - valid_log:
-            invalid_log = next(iter(input_log - valid_log))
-            raise ValueError(
-                f"Boolean, None and 'sym' are valid options, '{invalid_log}' is given."
-            )
 
         if self.logx is True or self.loglog is True:
             [a.set_xscale("log") for a in axes]
@@ -1058,11 +1075,14 @@ class MPLPlot(ABC):
     ):
         if num_colors is None:
             num_colors = self.nseries
-
+        if color_kwds == "color":
+            color = self.color
+        else:
+            color = self.kwds.get(color_kwds)
         return get_standard_colors(
             num_colors=num_colors,
             colormap=self.colormap,
-            color=self.kwds.get(color_kwds),
+            color=color,
         )
 
     # TODO: tighter typing for first return?
@@ -1302,7 +1322,7 @@ class ScatterPlot(PlanePlot):
             self.data[c].dtype, CategoricalDtype
         )
 
-        color = self.kwds.pop("color", None)
+        color = self.color
         c_values = self._get_c_values(color, color_by_categorical, c_is_column)
         norm, cmap = self._get_norm_and_cmap(c_values, color_by_categorical)
         cb = self._get_colorbar(c_values, c_is_column)
@@ -1330,7 +1350,12 @@ class ScatterPlot(PlanePlot):
                 cbar.ax.set_yticklabels(self.data[c].cat.categories)
 
         if label is not None:
-            self._append_legend_handles_labels(scatter, label)
+            self._append_legend_handles_labels(
+                # error: Argument 2 to "_append_legend_handles_labels" of
+                # "MPLPlot" has incompatible type "Hashable"; expected "str"
+                scatter,
+                label,  # type: ignore[arg-type]  # pyright: ignore[reportGeneralTypeIssues]
+            )
 
         errors_x = self._get_errorbars(label=x, index=0, yerr=False)
         errors_y = self._get_errorbars(label=y, index=0, xerr=False)
@@ -1487,6 +1512,8 @@ class LinePlot(MPLPlot):
         for i, (label, y) in enumerate(it):
             ax = self._get_ax(i)
             kwds = self.kwds.copy()
+            if self.color is not None:
+                kwds["color"] = self.color
             style, kwds = self._apply_style_colors(
                 colors,
                 kwds,
@@ -1993,13 +2020,25 @@ class PiePlot(MPLPlot):
         if (data < 0).any().any():
             raise ValueError(f"{self._kind} plot doesn't allow negative values")
         MPLPlot.__init__(self, data, kind=kind, **kwargs)
-        self.grid = False
-        self.logy = False
-        self.logx = False
-        self.loglog = False
 
-    def _validate_color_args(self) -> None:
-        pass
+    @classmethod
+    def _validate_log_kwd(
+        cls,
+        kwd: str,
+        value: bool | None | Literal["sym"],
+    ) -> bool | None | Literal["sym"]:
+        super()._validate_log_kwd(kwd=kwd, value=value)
+        if value is not False:
+            warnings.warn(
+                f"PiePlot ignores the '{kwd}' keyword",
+                UserWarning,
+                stacklevel=find_stack_level(),
+            )
+        return False
+
+    def _validate_color_args(self, color, colormap) -> None:
+        # TODO: warn if color is passed and ignored?
+        return None
 
     def _make_plot(self, fig: Figure) -> None:
         colors = self._get_colors(num_colors=len(self.data), color_kwds="colors")
