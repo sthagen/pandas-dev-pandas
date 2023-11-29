@@ -63,6 +63,7 @@ from pandas.errors import (
     _chained_assignment_method_msg,
     _chained_assignment_msg,
     _chained_assignment_warning_method_msg,
+    _chained_assignment_warning_msg,
 )
 from pandas.util._decorators import (
     Appender,
@@ -4204,6 +4205,18 @@ class DataFrame(NDFrame, OpsMixin):
             if sys.getrefcount(self) <= 3:
                 warnings.warn(
                     _chained_assignment_msg, ChainedAssignmentError, stacklevel=2
+                )
+        # elif not PYPY and not using_copy_on_write():
+        elif not PYPY and warn_copy_on_write():
+            if sys.getrefcount(self) <= 3:  # and (
+                #     warn_copy_on_write()
+                #     or (
+                #         not warn_copy_on_write()
+                #         and self._mgr.blocks[0].refs.has_reference()
+                #     )
+                # ):
+                warnings.warn(
+                    _chained_assignment_warning_msg, FutureWarning, stacklevel=2
                 )
 
         key = com.apply_if_callable(key, self)
@@ -8813,26 +8826,27 @@ class DataFrame(NDFrame, OpsMixin):
         1  b  e
         2  c  f
 
-        For Series, its name attribute must be set.
-
         >>> df = pd.DataFrame({'A': ['a', 'b', 'c'],
         ...                    'B': ['x', 'y', 'z']})
-        >>> new_column = pd.Series(['d', 'e'], name='B', index=[0, 2])
-        >>> df.update(new_column)
+        >>> new_df = pd.DataFrame({'B': ['d', 'f']}, index=[0, 2])
+        >>> df.update(new_df)
         >>> df
            A  B
         0  a  d
         1  b  y
-        2  c  e
+        2  c  f
+
+        For Series, its name attribute must be set.
+
         >>> df = pd.DataFrame({'A': ['a', 'b', 'c'],
         ...                    'B': ['x', 'y', 'z']})
-        >>> new_df = pd.DataFrame({'B': ['d', 'e']}, index=[1, 2])
-        >>> df.update(new_df)
+        >>> new_column = pd.Series(['d', 'e', 'f'], name='B')
+        >>> df.update(new_column)
         >>> df
            A  B
-        0  a  x
-        1  b  d
-        2  c  e
+        0  a  d
+        1  b  e
+        2  c  f
 
         If `other` contains NaNs the corresponding values are not updated
         in the original dataframe.
