@@ -122,9 +122,7 @@ _shared_docs_kwargs = {
 }
 
 
-_interval_shared_docs[
-    "class"
-] = """
+_interval_shared_docs["class"] = """
 %(summary)s
 
 Parameters
@@ -891,11 +889,18 @@ class IntervalArray(IntervalMixin, ExtensionArray):
         return obj[indexer]
 
     def _pad_or_backfill(  # pylint: disable=useless-parent-delegation
-        self, *, method: FillnaOptions, limit: int | None = None, copy: bool = True
+        self,
+        *,
+        method: FillnaOptions,
+        limit: int | None = None,
+        limit_area: Literal["inside", "outside"] | None = None,
+        copy: bool = True,
     ) -> Self:
         # TODO(3.0): after EA.fillna 'method' deprecation is enforced, we can remove
         #  this method entirely.
-        return super()._pad_or_backfill(method=method, limit=limit, copy=copy)
+        return super()._pad_or_backfill(
+            method=method, limit=limit, limit_area=limit_area, copy=copy
+        )
 
     def fillna(
         self, value=None, method=None, limit: int | None = None, copy: bool = True
@@ -1482,9 +1487,7 @@ class IntervalArray(IntervalMixin, ExtensionArray):
         dtype = IntervalDtype(left.dtype, closed=closed)
         return self._simple_new(left, right, dtype=dtype)
 
-    _interval_shared_docs[
-        "is_non_overlapping_monotonic"
-    ] = """
+    _interval_shared_docs["is_non_overlapping_monotonic"] = """
         Return a boolean whether the %(klass)s is non-overlapping and monotonic.
 
         Non-overlapping means (no Intervals share points), and monotonic means
