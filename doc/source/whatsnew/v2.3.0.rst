@@ -101,7 +101,7 @@ Deprecations
 
 Performance improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~
--
+- Performance improvement in :meth:`Index.take` when ``indices`` is a full range indexer from zero to length of index (:issue:`56806`)
 -
 
 .. ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ Categorical
 
 Datetimelike
 ^^^^^^^^^^^^
--
+- Bug in :func:`date_range` where the last valid timestamp would sometimes not be produced (:issue:`56134`)
 -
 
 Timedelta
