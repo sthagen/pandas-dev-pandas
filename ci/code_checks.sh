@@ -169,20 +169,14 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.Interval\
         pandas.Grouper\
         pandas.core.groupby.SeriesGroupBy.apply\
-        pandas.core.groupby.SeriesGroupBy.transform\
-        pandas.core.groupby.DataFrameGroupBy.transform\
         pandas.core.groupby.DataFrameGroupBy.nth\
         pandas.core.groupby.DataFrameGroupBy.rolling\
-        pandas.core.groupby.SeriesGroupBy.idxmax\
-        pandas.core.groupby.SeriesGroupBy.idxmin\
         pandas.core.groupby.SeriesGroupBy.nth\
         pandas.core.groupby.SeriesGroupBy.rolling\
         pandas.core.groupby.DataFrameGroupBy.hist\
         pandas.core.groupby.DataFrameGroupBy.plot\
         pandas.core.groupby.DataFrameGroupBy.corrwith\
-        pandas.core.groupby.SeriesGroupBy.plot\
-        pandas.core.window.rolling.Rolling.quantile\
-        pandas.core.window.expanding.Expanding.quantile # There should be no backslash in the final line, please keep this comment in the last ignored function
+        pandas.core.groupby.SeriesGroupBy.plot # There should be no backslash in the final line, please keep this comment in the last ignored function
     RET=$(($RET + $?)) ; echo $MSG "DONE"
 
 fi
