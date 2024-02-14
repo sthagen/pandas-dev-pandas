@@ -63,7 +63,6 @@ from pandas.errors.cow import (
 from pandas.util._decorators import (
     Appender,
     Substitution,
-    deprecate_nonkeyword_arguments,
     doc,
 )
 from pandas.util._exceptions import (
@@ -3195,9 +3194,6 @@ class DataFrame(NDFrame, OpsMixin):
     ) -> None:
         ...
 
-    @deprecate_nonkeyword_arguments(
-        version="3.0", allowed_args=["self", "path_or_buffer"], name="to_xml"
-    )
     @doc(
         storage_options=_shared_docs["storage_options"],
         compression_options=_shared_docs["compression_options"] % "path_or_buffer",
@@ -3205,6 +3201,7 @@ class DataFrame(NDFrame, OpsMixin):
     def to_xml(
         self,
         path_or_buffer: FilePath | WriteBuffer[bytes] | WriteBuffer[str] | None = None,
+        *,
         index: bool = True,
         root_name: str | None = "data",
         row_name: str | None = "row",
@@ -9191,7 +9188,7 @@ class DataFrame(NDFrame, OpsMixin):
         level: IndexLabel = -1,
         dropna: bool | lib.NoDefault = lib.no_default,
         sort: bool | lib.NoDefault = lib.no_default,
-        future_stack: bool = False,
+        future_stack: bool = True,
     ):
         """
         Stack the prescribed level(s) from columns to index.
@@ -9264,7 +9261,7 @@ class DataFrame(NDFrame, OpsMixin):
              weight height
         cat       0      1
         dog       2      3
-        >>> df_single_level_cols.stack(future_stack=True)
+        >>> df_single_level_cols.stack()
         cat  weight    0
              height    1
         dog  weight    2
@@ -9287,7 +9284,7 @@ class DataFrame(NDFrame, OpsMixin):
                  kg    pounds
         cat       1        2
         dog       2        4
-        >>> df_multi_level_cols1.stack(future_stack=True)
+        >>> df_multi_level_cols1.stack()
                     weight
         cat kg           1
             pounds       2
@@ -9311,7 +9308,7 @@ class DataFrame(NDFrame, OpsMixin):
                 kg      m
         cat    1.0    2.0
         dog    3.0    4.0
-        >>> df_multi_level_cols2.stack(future_stack=True)
+        >>> df_multi_level_cols2.stack()
                 weight  height
         cat kg     1.0     NaN
             m      NaN     2.0
@@ -9322,13 +9319,13 @@ class DataFrame(NDFrame, OpsMixin):
 
         The first parameter controls which level or levels are stacked:
 
-        >>> df_multi_level_cols2.stack(0, future_stack=True)
+        >>> df_multi_level_cols2.stack(0)
                      kg    m
         cat weight  1.0  NaN
             height  NaN  2.0
         dog weight  3.0  NaN
             height  NaN  4.0
-        >>> df_multi_level_cols2.stack([0, 1], future_stack=True)
+        >>> df_multi_level_cols2.stack([0, 1])
         cat  weight  kg    1.0
              height  m     2.0
         dog  weight  kg    3.0
@@ -9341,19 +9338,14 @@ class DataFrame(NDFrame, OpsMixin):
                 stack_multiple,
             )
 
-            if (
-                dropna is not lib.no_default
-                or sort is not lib.no_default
-                or self.columns.nlevels > 1
-            ):
-                warnings.warn(
-                    "The previous implementation of stack is deprecated and will be "
-                    "removed in a future version of pandas. See the What's New notes "
-                    "for pandas 2.1.0 for details. Specify future_stack=True to adopt "
-                    "the new implementation and silence this warning.",
-                    FutureWarning,
-                    stacklevel=find_stack_level(),
-                )
+            warnings.warn(
+                "The previous implementation of stack is deprecated and will be "
+                "removed in a future version of pandas. See the What's New notes "
+                "for pandas 2.1.0 for details. Do not specify the future_stack "
+                "argument to adopt the new implementation and silence this warning.",
+                FutureWarning,
+                stacklevel=find_stack_level(),
+            )
 
             if dropna is lib.no_default:
                 dropna = True
@@ -9369,14 +9361,14 @@ class DataFrame(NDFrame, OpsMixin):
 
             if dropna is not lib.no_default:
                 raise ValueError(
-                    "dropna must be unspecified with future_stack=True as the new "
+                    "dropna must be unspecified as the new "
                     "implementation does not introduce rows of NA values. This "
                     "argument will be removed in a future version of pandas."
                 )
 
             if sort is not lib.no_default:
                 raise ValueError(
-                    "Cannot specify sort with future_stack=True, this argument will be "
+                    "Cannot specify sort, this argument will be "
                     "removed in a future version of pandas. Sort the result using "
                     ".sort_index instead."
                 )
