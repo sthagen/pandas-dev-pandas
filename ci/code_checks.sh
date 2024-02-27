@@ -178,7 +178,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.Timestamp.tzinfo\
         pandas.Timestamp.value\
         pandas.Timestamp.year\
-        pandas.core.groupby.SeriesGroupBy.value_counts\
         pandas.tseries.offsets.BQuarterBegin.is_anchored\
         pandas.tseries.offsets.BQuarterBegin.is_on_offset\
         pandas.tseries.offsets.BQuarterBegin.n\
@@ -415,8 +414,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
 
     MSG='Partially validate docstrings (PR01)' ;  echo $MSG
     $BASE_DIR/scripts/validate_docstrings.py --format=actions --errors=PR01 --ignore_functions \
-        pandas.CategoricalIndex.equals\
-        pandas.CategoricalIndex.map\
         pandas.DataFrame.at_time\
         pandas.DataFrame.backfill\
         pandas.DataFrame.get\
@@ -1118,7 +1115,6 @@ if [[ -z "$CHECK" || "$CHECK" == "docstrings" ]]; then
         pandas.CategoricalIndex.as_ordered\
         pandas.CategoricalIndex.as_unordered\
         pandas.CategoricalIndex.codes\
-        pandas.CategoricalIndex.equals\
         pandas.CategoricalIndex.ordered\
         pandas.DataFrame.__dataframe__\
         pandas.DataFrame.__iter__\
