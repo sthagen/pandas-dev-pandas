@@ -2387,7 +2387,8 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
         index : bool or None, default None
             The index is only used when 'orient' is 'split', 'index', 'column',
             or 'table'. Of these, 'index' and 'column' do not support
-            `index=False`.
+            `index=False`. The string 'index' as a column name with empty :class:`Index`
+            or if it is 'index' will raise a ``ValueError``.
 
         indent : int, optional
            Length of whitespace used to indent each record.
@@ -6034,7 +6035,7 @@ class NDFrame(PandasObject, indexing.IndexingMixin):
                 object.__setattr__(self, name, getattr(other, name, None))
 
         if method == "concat":
-            objs = kwargs["objs"]
+            objs = other.objs
             # propagate attrs only if all concat arguments have the same attrs
             if all(bool(obj.attrs) for obj in objs):
                 # all concatenate arguments have non-empty attrs
