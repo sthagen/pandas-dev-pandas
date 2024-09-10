@@ -10,8 +10,6 @@ import warnings
 
 import numpy as np
 
-from pandas._config.config import get_option
-
 from pandas._libs import (
     lib,
     missing as libmissing,
@@ -42,8 +40,6 @@ from pandas.core.strings.object_array import ObjectStringArrayMixin
 if not pa_version_under10p1:
     import pyarrow as pa
     import pyarrow.compute as pc
-
-    from pandas.core.arrays.arrow._arrow_utils import fallback_performancewarning
 
 
 if TYPE_CHECKING:
@@ -294,13 +290,12 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     _str_startswith = ArrowStringArrayMixin._str_startswith
     _str_endswith = ArrowStringArrayMixin._str_endswith
     _str_pad = ArrowStringArrayMixin._str_pad
+    _str_slice = ArrowStringArrayMixin._str_slice
 
     def _str_contains(
         self, pat, case: bool = True, flags: int = 0, na=np.nan, regex: bool = True
     ):
         if flags:
-            if get_option("mode.performance_warnings"):
-                fallback_performancewarning()
             return super()._str_contains(pat, case, flags, na, regex)
 
         if not isna(na):
@@ -326,8 +321,6 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         regex: bool = True,
     ):
         if isinstance(pat, re.Pattern) or callable(repl) or not case or flags:
-            if get_option("mode.performance_warnings"):
-                fallback_performancewarning()
             return super()._str_replace(pat, repl, n, case, flags, regex)
 
         return ArrowExtensionArray._str_replace(self, pat, repl, n, case, flags, regex)
@@ -351,19 +344,6 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         if not pat.endswith("$") or pat.endswith("\\$"):
             pat = f"{pat}$"
         return self._str_match(pat, case, flags, na)
-
-    def _str_slice(
-        self, start: int | None = None, stop: int | None = None, step: int | None = None
-    ) -> Self:
-        if stop is None:
-            return super()._str_slice(start, stop, step)
-        if start is None:
-            start = 0
-        if step is None:
-            step = 1
-        return type(self)(
-            pc.utf8_slice_codeunits(self._pa_array, start=start, stop=stop, step=step)
-        )
 
     def _str_len(self):
         result = pc.utf8_length(self._pa_array)
