@@ -896,6 +896,7 @@ Timedelta
 - Accuracy improvement in :meth:`Timedelta.to_pytimedelta` to round microseconds consistently for large nanosecond based Timedelta (:issue:`57841`)
 - Bug in :class:`Timedelta` constructor failing to raise when passed an invalid keyword (:issue:`53801`)
 - Bug in :meth:`DataFrame.cumsum` which was raising ``IndexError`` if dtype is ``timedelta64[ns]`` (:issue:`57956`)
+- Bug in multiplication operations with ``timedelta64`` dtype failing to raise ``TypeError`` when multiplying by ``bool`` objects or dtypes (:issue:`58054`)
 
 Timezones
 ^^^^^^^^^
@@ -921,6 +922,7 @@ Conversion
 - Bug in :meth:`Series.astype` might modify read-only array inplace when casting to a string dtype (:issue:`57212`)
 - Bug in :meth:`Series.convert_dtypes` and :meth:`DataFrame.convert_dtypes` removing timezone information for objects with :class:`ArrowDtype` (:issue:`60237`)
 - Bug in :meth:`Series.reindex` not maintaining ``float32`` type when a ``reindex`` introduces a missing value (:issue:`45857`)
+- Bug in :meth:`to_datetime` and :meth:`to_timedelta` with input ``None`` returning ``None`` instead of ``NaT``, inconsistent with other conversion methods (:issue:`23055`)
 
 Strings
 ^^^^^^^
