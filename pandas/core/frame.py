@@ -9096,11 +9096,14 @@ class DataFrame(NDFrame, OpsMixin):
 
         # preserve column order
         new_columns = self.columns.union(other_columns, sort=False)
+        this = this.reindex(new_columns, axis=1)
+        other = other.reindex(new_columns, axis=1)
+
         do_fill = fill_value is not None
         result = {}
-        for col in new_columns:
-            series = this[col]
-            other_series = other[col]
+        for i in range(this.shape[1]):
+            series = this.iloc[:, i]
+            other_series = other.iloc[:, i]
 
             this_dtype = series.dtype
             other_dtype = other_series.dtype
@@ -9111,7 +9114,7 @@ class DataFrame(NDFrame, OpsMixin):
             # don't overwrite columns unnecessarily
             # DO propagate if this column is not in the intersection
             if not overwrite and other_mask.all():
-                result[col] = this[col].copy()
+                result[i] = series.copy()
                 continue
 
             if do_fill:
@@ -9120,7 +9123,7 @@ class DataFrame(NDFrame, OpsMixin):
                 series[this_mask] = fill_value
                 other_series[other_mask] = fill_value
 
-            if col not in self.columns:
+            if new_columns[i] not in self.columns:
                 # If self DataFrame does not have col in other DataFrame,
                 # try to promote series, which is all NaN, as other_dtype.
                 new_dtype = other_dtype
@@ -9145,10 +9148,10 @@ class DataFrame(NDFrame, OpsMixin):
                     arr, new_dtype
                 )
 
-            result[col] = arr
+            result[i] = arr
 
-        # convert_objects just in case
-        frame_result = self._constructor(result, index=new_index, columns=new_columns)
+        frame_result = self._constructor(result, index=new_index)
+        frame_result.columns = new_columns
         return frame_result.__finalize__(self, method="combine")
 
     def combine_first(self, other: DataFrame) -> DataFrame:
@@ -9212,9 +9215,14 @@ class DataFrame(NDFrame, OpsMixin):
             combined = self.combine(other, combiner, overwrite=False)
 
         dtypes = {
+            # Check for isinstance(..., (np.dtype, ExtensionDtype))
+            #  to prevent raising on non-unique columns see GH#29135.
+            #  Note we will just not-cast in these cases.
             col: find_common_type([self.dtypes[col], other.dtypes[col]])
             for col in self.columns.intersection(other.columns)
-            if combined.dtypes[col] != self.dtypes[col]
+            if isinstance(combined.dtypes[col], (np.dtype, ExtensionDtype))
+            and isinstance(self.dtypes[col], (np.dtype, ExtensionDtype))
+            and combined.dtypes[col] != self.dtypes[col]
         }
 
         if dtypes:
@@ -9422,7 +9430,7 @@ class DataFrame(NDFrame, OpsMixin):
             index. If a dict or Series is passed, the Series or dict VALUES
             will be used to determine the groups (the Series' values are first
             aligned; see ``.align()`` method). If a list or ndarray of length
-            equal to the selected axis is passed (see the `groupby user guide
+            equal to the number of rows is passed (see the `groupby user guide
             <https://pandas.pydata.org/pandas-docs/stable/user_guide/groupby.html#splitting-an-object-into-groups>`_),
             the values are used as-is to determine the groups. A label or list
             of labels may be passed to group by the columns in ``self``.
